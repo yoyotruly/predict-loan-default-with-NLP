@@ -1,4 +1,10 @@
+import re
 import pandas as pd
+import unidecode
+from bs4 import BeautifulSoup
+from nltk import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
 
 """
 A set of helper functions for kiva loan default prediction
@@ -38,7 +44,6 @@ def import_data(file, file_format='csv'):
     return data
 
 
-
 def plot_stacked_bar(data, var, by_var, sort=True):
 
     """Plot stacked bar chart.
@@ -64,3 +69,69 @@ def plot_stacked_bar(data, var, by_var, sort=True):
         data = data.unstack()
 
     data.plot.bar(stacked=True, color=kiva_pal[-1:-6:-4])
+
+
+def preproc_text1(text):
+
+    """Initial text cleaning.
+
+    Convert text to all lowercase and strip it of unwanted HTML tags and content, unwanted REGEX patterns, natural line breaks and non-unicode characters.
+
+    Args:
+    text: a string.
+
+    Returns:
+    A cleaned text string.
+    """
+
+    bad_tags = ['i', 'h4', 'b']
+    bad_regex_list = ['translated[^\.]+\.',
+                      'previous (profile|loan)[^\.]+',
+                      'http\S+',
+                      'www\S+',
+                      'mifex offers its clients[^\.]+\.',
+                      'for more information[^\<]+']
+    bad_regex = re.compile('|'.join(bad_regex_list))
+
+    # remove unwanted html content contained in BAD_TAGS
+    soup = BeautifulSoup(text, 'lxml')
+    content_to_remove = [s.get_text() for s in soup.find_all(bad_tags)]
+    if content_to_remove:
+        text = ''.join([text.replace(c, "") for c in content_to_remove])
+    else:
+        text = text
+
+    text = text.lower()
+    text = BeautifulSoup(text, 'lxml').text  # remove html tags
+    text = bad_regex.sub("", text) # remove unwanted REGEX patterns
+    text = ' '.join(text.splitlines())  # remove natural line breaks
+    text = unidecode.unidecode(text)  # remove non-English characters
+
+    return text
+
+
+def preproc_text2(text):
+
+    """Further text cleaning.
+
+    Strip text of punctuations, numbers and customized stopwords, then lemmatize nouns and verbs.
+
+    Args:
+    text: a string.
+
+    Returns:
+    A cleaned string.
+    """
+
+    stop_words = stopwords.words('english') + stopwords.words('spanish')
+    stop_words.extend(['loan', 'also', 'kiva', 'am', 'pm'])
+
+    text = re.sub(r'[^\w\s]', '', text)  # remove punctuations
+    text = re.sub(r'\d+', '', text)  # remove numbers
+    tokens = word_tokenize(text)
+    tokens = [token for token in tokens if token not in stop_words]
+    tokens = [WordNetLemmatizer().lemmatize(token, pos='n') for token in tokens]
+    tokens = [WordNetLemmatizer().lemmatize(token, pos='v') for token in tokens]
+    text = ' '.join(tokens)
+
+    return text
